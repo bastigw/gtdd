@@ -1,0 +1,26 @@
+{
+  "name": "basti-blog",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "gulp watch",
+    "zip": "gulp zip"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@babel/core": "7.1.0",
+    "@babel/preset-env": "7.1.0",
+    "autoprefixer": "9.1.5",
+    "gulp": "4.0.0",
+    "gulp-babel": "8.0.0",
+    "gulp-concat": "2.6.1",
+    "gulp-postcss": "8.0.0",
+    "gulp-sourcemaps": "2.6.4",
+    "gulp-watch": "4.3.8",
+    "gulp-zip": "4.2.0",
+    "postcss-import": "12.0.0",
+    "postcss-preset-env": "6.0.3"
+  }
+}
