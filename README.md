@@ -34,7 +34,8 @@ For more information about developing a the check out the Ghost [theme API docum
 
 # Contributors
 
-
+* [Maximilian Ehlers](https://github.com/b-m-f): with his [gotede](https://github.com/b-m-f/gotede) repository
+* [Casper Theme Contributors](https://github.com/TryGhost/Casper/graphs/contributors)
 
 
 # Copyright & License
