@@ -1,134 +1,234 @@
-const gulp = require("gulp");
+const { series, watch, src, dest, parallel } = require("gulp");
+const pump = require("pump");
+const path = require("path");
+const releaseUtils = require("@tryghost/release-utils");
+const inquirer = require("inquirer");
 
 // gulp plugins and utils
+const livereload = require("gulp-livereload");
 const postcss = require("gulp-postcss");
-const sourcemaps = require("gulp-sourcemaps");
 const zip = require("gulp-zip");
 const concat = require("gulp-concat");
+const uglify = require("gulp-uglify");
+const beeper = require("beeper");
+const fs = require("fs");
 
 // postcss plugins
-const postCSSPresetEnv = require("postcss-preset-env");
 const autoprefixer = require("autoprefixer");
-const postCSSImport = require("postcss-import");
+const colorFunction = require("postcss-color-function");
+const cssnano = require("cssnano");
+const customProperties = require("postcss-custom-properties");
+const easyimport = require("postcss-easy-import");
 
-//babel
-const babel = require("gulp-babel");
+const REPO = "TryGhost/Casper";
+const REPO_READONLY = "TryGhost/Casper";
+const USER_AGENT = "Casper";
+const CHANGELOG_PATH = path.join(process.cwd(), ".", "changelog.md");
 
-const source = ".",
-  destination = "./docker-mount";
+function serve(done) {
+    livereload.listen();
+    done();
+}
 
-// Partial 
+const handleError = done => {
+    return function(err) {
+        if (err) {
+            beeper();
+        }
+        return done(err);
+    };
+};
 
-gulp.task("partial", function() {
-  return gulp.src(``${source}/assets/css/styles.css``)
-});
+function hbs(done) {
+    pump(
+        [src(["*.hbs", "partials/**/*.hbs"]), livereload()],
+        handleError(done)
+    );
+}
 
-gulp.task("watch-css", function() {
-  gulp.watch(`${source}/assets/css/**/*.css`, gulp.series("css"));
-});
+function css(done) {
+    pump(
+        [
+            src("assets/css/*.css", { sourcemaps: true }),
+            postcss([
+                easyimport,
+                customProperties({ preserve: false }),
+                colorFunction(),
+                autoprefixer(),
+                cssnano()
+            ]),
+            dest("assets/built/", { sourcemaps: "." }),
+            livereload()
+        ],
+        handleError(done)
+    );
+}
 
+function js(done) {
+    pump(
+        [
+            src(
+                [
+                    // pull in lib files first so our own code can depend on it
+                    "assets/js/lib/*.js",
+                    "assets/js/*.js"
+                ],
+                { sourcemaps: true }
+            ),
+            concat("casper.js"),
+            uglify(),
+            dest("assets/built/", { sourcemaps: "." }),
+            livereload()
+        ],
+        handleError(done)
+    );
+}
 
-//  CSS
-gulp.task("css", function() {
-  const processors = [
-    postCSSImport(),
-    postCSSPresetEnv({
-      stage: 3,
-      features: {
-        "nesting-rules": true
-      }
-    }),
-    autoprefixer
-  ];
-  return gulp
-    .src(`${source}/assets/css/styles.css`)
-    .pipe(sourcemaps.init())
-    .pipe(postcss(processors))
-    .pipe(sourcemaps.write("."))
-    .pipe(gulp.dest("assets/built/"));
-});
+function zipper(done) {
+    const filename = require("./package.json").name + ".zip";
 
-gulp.task("watch-css", function() {
-  gulp.watch(`${source}/assets/css/**/*.css`, gulp.series("css"));
-});
+    pump(
+        [
+            src([
+                "**",
+                "!node_modules",
+                "!node_modules/**",
+                "!dist",
+                "!dist/**"
+            ]),
+            zip(filename),
+            dest("dist/")
+        ],
+        handleError(done)
+    );
+}
 
-// JavaScript
+function serveDocker(done) {
+    pump(
+        [
+            src([
+                "**",
+                "!node_modules",
+                "!node_modules/**",
+                "!dist",
+                "!dist/**",
+                "!docker-compose.yml",
+                "!docker-mount",
+                "!docker-mount/**"
+            ]),
+            dest("docker-mount/")
+        ],
+        handleError(done)
+    );
+}
 
-gulp.task("js", function() {
-  return gulp
-    .src(`${source}/assets/js/**/*.js`)
-    .pipe(sourcemaps.init())
-    .pipe(
-      babel({
-        presets: [
-          [
-            "@babel/env",
-            {
-              targets: {
-                browsers: "> 5%"
-              }
+const cssWatcher = () => watch("assets/css/**", series(css, serveDocker));
+const hbsWatcher = () => watch(["*.hbs", "partials/**/*.hbs"], series(hbs, serveDocker));
+const watcher = parallel(cssWatcher, hbsWatcher);
+const build = series(css, js);
+
+const previousRelease = () => {
+    return releaseUtils.releases
+        .get({
+            userAgent: USER_AGENT,
+            uri: `https://api.github.com/repos/${REPO_READONLY}/releases`
+        })
+        .then(response => {
+            if (!response || !response.length) {
+                console.log("No releases found. Skipping...");
+                return;
             }
-          ]
-        ]
-      })
-    )
-    .pipe(concat("main.js"))
-    .pipe(sourcemaps.write("."))
-    .pipe(gulp.dest("assets/built/"));
-});
 
-gulp.task("watch-js", function() {
-  gulp.watch(`${source}/assets/js/**/*.js`, gulp.series("js"));
-});
+            let prevVersion = response[0].tag_name || response[0].name;
+            console.log(`Previous version ${prevVersion}`);
+            return prevVersion;
+        });
+};
 
-// File mover
-const sourceFiles = [
-  "*.hbs",
-  "assets/built/**/*",
-  "package.json",
-  "locales**/*"
-];
+exports.build = build;
+exports.zip = series(build, zipper);
+exports.default = series(build, serve, watcher);
 
-gulp.task("move-source-files", function(done) {
-  gulp.src(sourceFiles, { base: source }).pipe(gulp.dest(destination));
-  done();
-});
+exports.release = () => {
+    // @NOTE: https://yarnpkg.com/lang/en/docs/cli/version/
+    // require(./package.json) can run into caching issues, this re-reads from file everytime on release
+    var packageJSON = JSON.parse(fs.readFileSync("./package.json"));
+    const newVersion = packageJSON.version;
 
-gulp.task("watch-source-files", function() {
-  gulp.watch(sourceFiles, gulp.series("move-source-files"));
-});
+    if (!newVersion || newVersion === "") {
+        console.log(`Invalid version: ${newVersion}`);
+        return;
+    }
 
-// MISC
-gulp.task(
-  "watch",
-  gulp.series(
-    "css",
-    "js",
-    "move-source-files",
-    gulp.parallel("watch-css", "watch-js", "watch-source-files")
-  )
-);
+    console.log(`\nCreating release for ${newVersion}...`);
 
-gulp.task(
-  "zip",
-  gulp.series("css", function() {
-    const targetDir = "zip/";
-    const themeName = require("./package.json").name;
-    const filename = themeName + ".zip";
+    let config;
+    try {
+        config = require("./config");
+    } catch (err) {
+        config = null;
+    }
 
-    return gulp
-      .src([
-        "**",
-        "!node_modules",
-        "!node_modules/**",
-        "!zip",
-        "!zip/**",
-        "!docker-mount",
-        "!docker-mount/**"
-      ])
-      .pipe(zip(filename))
-      .pipe(gulp.dest(targetDir));
-  })
-);
+    if (
+        !config ||
+        !config.github ||
+        !config.github.username ||
+        !config.github.token
+    ) {
+        console.log(
+            "Please copy config.example.json and configure Github token."
+        );
+        return;
+    }
 
-gulp.task("default", gulp.series("watch"));
+    inquirer
+        .prompt([
+            {
+                type: "input",
+                name: "compatibleWithGhost",
+                message: "Which version of Ghost is it compatible with?",
+                default: "3.0.0"
+            }
+        ])
+        .then(result => {
+            let compatibleWithGhost = result.compatibleWithGhost;
+
+            previousRelease().then(previousVersion => {
+                const changelog = new releaseUtils.Changelog({
+                    changelogPath: CHANGELOG_PATH,
+                    folder: path.join(process.cwd(), ".")
+                });
+
+                changelog
+                    .write({
+                        githubRepoPath: `https://github.com/${REPO}`,
+                        lastVersion: previousVersion
+                    })
+                    .sort()
+                    .clean();
+
+                releaseUtils.releases
+                    .create({
+                        draft: true,
+                        preRelease: false,
+                        tagName: newVersion,
+                        releaseName: newVersion,
+                        userAgent: USER_AGENT,
+                        uri: `https://api.github.com/repos/${REPO}/releases`,
+                        github: {
+                            username: config.github.username,
+                            token: config.github.token
+                        },
+                        content: [
+                            `**Compatible with Ghost ≥ ${compatibleWithGhost}**\n\n`
+                        ],
+                        changelogPath: CHANGELOG_PATH
+                    })
+                    .then(response => {
+                        console.log(
+                            `\nRelease draft generated: ${response.releaseUrl}\n`
+                        );
+                    });
+            });
+        });
+};
