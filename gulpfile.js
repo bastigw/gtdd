@@ -5,7 +5,6 @@ const releaseUtils = require("@tryghost/release-utils");
 const inquirer = require("inquirer");
 
 // gulp plugins and utils
-const livereload = require("gulp-livereload");
 const postcss = require("gulp-postcss");
 const zip = require("gulp-zip");
 const concat = require("gulp-concat");
@@ -46,10 +45,6 @@ const handleError = done => {
         return done(err);
     };
 };
-
-function hbs() {
-    src(["*.hbs", "partials/**/*.hbs"]);
-}
 
 function css(done) {
     pump(
