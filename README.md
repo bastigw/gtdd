@@ -32,6 +32,9 @@ The default theme files are from [the official Casper Theme](https://github.com/
 For more information about developing a the check out the Ghost [theme API documentation](https://ghost.org/docs/api/handlebars-themes/)
 
 
+# Contributors
+
+
 
 
 # Copyright & License
