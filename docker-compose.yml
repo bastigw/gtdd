@@ -3,9 +3,9 @@ version: "3"
 services:
   ghost:
     image: ghost
-    container_name: basti-blog
+    container_name: your-theme-name
     volumes: 
-      - ./docker-mount:/var/lib/ghost/content/themes/basti-blog:rw,z
+      - ./docker-mount:/var/lib/ghost/content/themes/your-theme-name:rw,z
     ports: 
       - "9090:2368"
     environment:
