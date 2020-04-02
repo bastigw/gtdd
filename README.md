@@ -21,6 +21,10 @@ docker-compose up -d # Start docker container. Mounts to local docker-mount dire
 
 Default port is `9090`. To change it edit `docker-compose.yml`
 
+Go to [http://localhost:9090/ghost](http://localhost:9090/ghost/). Follow the instructions until you are on the admin page. Now go to http://localhost:9090/ghost/#/settings/design and at the bottom activate your theme. 
+
+Changes that you now make in the source directory should be updated. Hot reload is not working currently. 
+
 ## Casper Theme
 
 The default theme files are from [the official Casper Theme](https://github.com/TryGhost/Casper).
