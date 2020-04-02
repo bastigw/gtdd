@@ -25,13 +25,21 @@ const REPO_READONLY = "TryGhost/Casper";
 const USER_AGENT = "Casper";
 const CHANGELOG_PATH = path.join(process.cwd(), ".", "changelog.md");
 
+// browser sync
+browserSync = require("browser-sync").create();
+
 function serve(done) {
-    livereload.listen();
+    browserSync.init({
+        proxy: "http://localhost:" + 9090,
+        open: false,
+        notify: false
+    });
     done();
 }
 
 const handleError = done => {
     return function(err) {
+        console.log(err);
         if (err) {
             beeper();
         }
@@ -39,11 +47,8 @@ const handleError = done => {
     };
 };
 
-function hbs(done) {
-    pump(
-        [src(["*.hbs", "partials/**/*.hbs"]), livereload()],
-        handleError(done)
-    );
+function hbs() {
+    src(["*.hbs", "partials/**/*.hbs"]);
 }
 
 function css(done) {
@@ -57,8 +62,7 @@ function css(done) {
                 autoprefixer(),
                 cssnano()
             ]),
-            dest("assets/built/", { sourcemaps: "." }),
-            livereload()
+            dest("assets/built/", { sourcemaps: "." })
         ],
         handleError(done)
     );
@@ -75,10 +79,9 @@ function js(done) {
                 ],
                 { sourcemaps: true }
             ),
-            concat("casper.js"),
+            concat("your-theme.js"),
             uglify(),
-            dest("assets/built/", { sourcemaps: "." }),
-            livereload()
+            dest("assets/built/", { sourcemaps: "." })
         ],
         handleError(done)
     );
@@ -103,6 +106,11 @@ function zipper(done) {
     );
 }
 
+function reload(done) {
+    browserSync.reload();
+    done();
+}
+
 function serveDocker(done) {
     pump(
         [
@@ -122,10 +130,16 @@ function serveDocker(done) {
     );
 }
 
-const cssWatcher = () => watch("assets/css/**", series(css, serveDocker));
-const hbsWatcher = () => watch(["*.hbs", "partials/**/*.hbs"], series(hbs, serveDocker));
+const cssWatcher = () =>
+    watch("assets/css/**", series(css, serveDocker, reload));
+const hbsWatcher = () =>
+    watch(["*.hbs", "partials/**/*.hbs"], series(serveDocker, reload));
 const watcher = parallel(cssWatcher, hbsWatcher);
 const build = series(css, js);
+
+exports.build = build;
+exports.zip = series(build, zipper);
+exports.default = series(build, serve, watcher);
 
 const previousRelease = () => {
     return releaseUtils.releases
@@ -144,10 +158,6 @@ const previousRelease = () => {
             return prevVersion;
         });
 };
-
-exports.build = build;
-exports.zip = series(build, zipper);
-exports.default = series(build, serve, watcher);
 
 exports.release = () => {
     // @NOTE: https://yarnpkg.com/lang/en/docs/cli/version/
