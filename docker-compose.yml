@@ -11,4 +11,5 @@ services:
     environment:
       - url=http://localhost:9090
       - NODE_ENV=development
+    restart: "no"
 
