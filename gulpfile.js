@@ -105,7 +105,9 @@ function css_startup(done) {
 function css(done) {
     pump(
         [
-            src("assets/css/*.css", { sourcemaps: true }),
+            src("assets/css/*.css", "!assets/css/tailwind.css", {
+                sourcemaps: true,
+            }),
             postcss([...css_actions]),
             dest("assets/built/", { sourcemaps: "." }),
         ],
