@@ -44,6 +44,7 @@
     "bugs": "REPO_URL/issues",
     "contributors": "REPO_URL/graphs/contributors",
     "devDependencies": {
+        "@fullhuman/postcss-purgecss": "^2.1.0",
         "@tryghost/release-utils": "0.5.0",
         "autoprefixer": "9.7.5",
         "beeper": "2.0.0",
@@ -59,8 +60,8 @@
         "postcss-color-function": "4.1.0",
         "postcss-custom-properties": "9.1.1",
         "postcss-easy-import": "3.0.0",
-        "tailwindcss": "^1.2.0",
-        "pump": "3.0.0"
+        "pump": "3.0.0",
+        "tailwindcss": "^1.2.0"
     },
     "browserslist": [
         "defaults"

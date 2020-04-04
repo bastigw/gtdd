@@ -20,6 +20,7 @@ const customProperties = require("postcss-custom-properties");
 const easyimport = require("postcss-easy-import");
 const tailwindcss = require("tailwindcss");
 const tailwind_config = "./tailwind.config.js";
+const purgecss = require("@fullhuman/postcss-purgecss");
 
 const REPO = "TryGhost/Casper";
 const REPO_READONLY = "TryGhost/Casper";
@@ -63,7 +64,16 @@ function css_startup(done) {
                 customProperties({ preserve: false }),
                 colorFunction(),
                 autoprefixer(),
-                cssnano()
+                cssnano(),
+                ...(process.env.NODE_ENV === "production"
+                    ? [
+                          purgecss({
+                              content: ["**/*.hbs"],
+                              defaultExtractor: content =>
+                                  content.match(/[\w-/:]+(?<!:)/g) || []
+                          })
+                      ]
+                    : [])
             ]),
             dest("assets/built/", { sourcemaps: "." })
         ],
