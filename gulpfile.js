@@ -18,11 +18,14 @@ const colorFunction = require("postcss-color-function");
 const cssnano = require("cssnano");
 const customProperties = require("postcss-custom-properties");
 const easyimport = require("postcss-easy-import");
+const tailwindcss = require("tailwindcss");
+const tailwind_config = "./tailwind.config.js";
 
 const REPO = "TryGhost/Casper";
 const REPO_READONLY = "TryGhost/Casper";
 const USER_AGENT = "Casper";
 const CHANGELOG_PATH = path.join(process.cwd(), ".", "changelog.md");
+const theme_name = require("./package.json").name;
 
 // browser sync
 browserSync = require("browser-sync").create();
@@ -38,7 +41,6 @@ function serve(done) {
 
 const handleError = done => {
     return function(err) {
-        console.log(err);
         if (err) {
             beeper();
         }
@@ -46,6 +48,34 @@ const handleError = done => {
     };
 };
 
+/**
+ * Build TailwindCSS style once
+ *
+ * @param {*} done
+ */
+function css_startup(done) {
+    pump(
+        [
+            src("assets/css/*.css", { sourcemaps: true }),
+            postcss([
+                tailwindcss(tailwind_config),
+                easyimport,
+                customProperties({ preserve: false }),
+                colorFunction(),
+                autoprefixer(),
+                cssnano()
+            ]),
+            dest("assets/built/", { sourcemaps: "." })
+        ],
+        handleError(done)
+    );
+}
+
+/**
+ * Build css without tailwindcss
+ *
+ * @param {*} done
+ */
 function css(done) {
     pump(
         [
@@ -74,12 +104,17 @@ function js(done) {
                 ],
                 { sourcemaps: true }
             ),
-            concat("your-theme.js"),
+            concat(`${theme_name}.js`),
             uglify(),
             dest("assets/built/", { sourcemaps: "." })
         ],
         handleError(done)
     );
+}
+
+function hbs(done) {
+    src(["*.hbs", "partials/**/*.hbs"]);
+    handleError(done);
 }
 
 function zipper(done) {
@@ -117,10 +152,16 @@ function serveDocker(done) {
                 "!dist/**",
                 "!docker-compose.yml",
                 "!docker-mount",
-                "!docker-mount/**"
+                "!docker-mount/**",
+                "!assets",
+                "!assets/**"
             ]),
             dest("docker-mount/")
         ],
+        handleError(done)
+    );
+    pump(
+        [src(["assets/built/*"]), dest("docker-mount/assets/built")],
         handleError(done)
     );
 }
@@ -130,7 +171,7 @@ const cssWatcher = () =>
 const hbsWatcher = () =>
     watch(["*.hbs", "partials/**/*.hbs"], series(serveDocker, reload));
 const watcher = parallel(cssWatcher, hbsWatcher);
-const build = series(css, js);
+const build = series(css_startup, js, serveDocker);
 
 exports.build = build;
 exports.zip = series(build, zipper);
