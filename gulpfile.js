@@ -50,7 +50,7 @@ const handleError = done => {
 
 /**
  * Build TailwindCSS style once
- *
+ * and if in prod use purgecss
  * @param {*} done
  */
 function css_startup(done) {
