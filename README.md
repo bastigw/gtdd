@@ -30,6 +30,8 @@ Go to http://localhost:3000/ghost/. Follow the instructions until you are on the
 
 Make sure to edit the `package.json`.
 
+This theme comes with [tailwind.css](https://github.com/tailwindcss/tailwindcss). If you do not want to use tailwind remove all tailwind specific lines from `gulpfile.js`
+
 ## Casper Theme
 
 The default theme files are from [the official Casper Theme](https://github.com/TryGhost/Casper).
@@ -38,7 +40,7 @@ The default theme files are from [the official Casper Theme](https://github.com/
 
 -   `gulpfile.js`: Added serveDocker function. This function builds the theme and stores it in the `docker-mount` directory
 
--   `package.json`: Livereload dependency was swapped for browser-sync
+-   `package.json`: Livereload dependency was swapped for browser-sync. Tailwind was added.
 
 For more information about developing a theme check out the Ghost [Theme API documentation](https://ghost.org/docs/api/handlebars-themes/)
 
