@@ -22,26 +22,26 @@ const tailwindcss = require("tailwindcss");
 const tailwind_config = "./tailwind.config.js";
 const purgecss = require("@fullhuman/postcss-purgecss");
 
+// browser sync
+browserSync = require("browser-sync").create();
+
 const REPO = "TryGhost/Casper";
 const REPO_READONLY = "TryGhost/Casper";
 const USER_AGENT = "Casper";
 const CHANGELOG_PATH = path.join(process.cwd(), ".", "changelog.md");
 const theme_name = require("./package.json").name;
 
-// browser sync
-browserSync = require("browser-sync").create();
-
 function serve(done) {
     browserSync.init({
         proxy: "http://localhost:" + 9090,
         open: false,
-        notify: false
+        notify: false,
     });
     done();
 }
 
-const handleError = done => {
-    return function(err) {
+const handleError = (done) => {
+    return function (err) {
         if (err) {
             beeper();
         }
@@ -49,33 +49,49 @@ const handleError = done => {
     };
 };
 
+const css_actions = [
+    easyimport,
+    customProperties({ preserve: false }),
+    colorFunction(),
+    autoprefixer(),
+    cssnano(),
+];
+
 /**
  * Build TailwindCSS style once
- * and if in prod use purgecss
+ * and apply purgecss
+ * @param {*} done
+ */
+function css_prod(done) {
+    pump(
+        [
+            src("assets/css/*.css", { sourcemaps: true }),
+            postcss([
+                tailwindcss(tailwind_config),
+                ...css_actions,
+                purgecss({
+                    content: ["**/*.hbs"],
+                    defaultExtractor: (content) =>
+                        content.match(/[\w-/:]+(?<!:)/g) || [],
+                }),
+            ]),
+            dest("assets/built/", { sourcemaps: "." }),
+        ],
+        handleError(done)
+    );
+}
+
+/**
+ * Build TailwindCSS style once
+ *
  * @param {*} done
  */
 function css_startup(done) {
     pump(
         [
             src("assets/css/*.css", { sourcemaps: true }),
-            postcss([
-                tailwindcss(tailwind_config),
-                easyimport,
-                customProperties({ preserve: false }),
-                colorFunction(),
-                autoprefixer(),
-                cssnano(),
-                ...(process.env.NODE_ENV === "production"
-                    ? [
-                          purgecss({
-                              content: ["**/*.hbs"],
-                              defaultExtractor: content =>
-                                  content.match(/[\w-/:]+(?<!:)/g) || []
-                          })
-                      ]
-                    : [])
-            ]),
-            dest("assets/built/", { sourcemaps: "." })
+            postcss([tailwindcss(tailwind_config), ...css_actions]),
+            dest("assets/built/", { sourcemaps: "." }),
         ],
         handleError(done)
     );
@@ -90,14 +106,8 @@ function css(done) {
     pump(
         [
             src("assets/css/*.css", { sourcemaps: true }),
-            postcss([
-                easyimport,
-                customProperties({ preserve: false }),
-                colorFunction(),
-                autoprefixer(),
-                cssnano()
-            ]),
-            dest("assets/built/", { sourcemaps: "." })
+            postcss([...css_actions]),
+            dest("assets/built/", { sourcemaps: "." }),
         ],
         handleError(done)
     );
@@ -110,26 +120,20 @@ function js(done) {
                 [
                     // pull in lib files first so our own code can depend on it
                     "assets/js/lib/*.js",
-                    "assets/js/*.js"
+                    "assets/js/*.js",
                 ],
                 { sourcemaps: true }
             ),
             concat(`${theme_name}.js`),
             uglify(),
-            dest("assets/built/", { sourcemaps: "." })
+            dest("assets/built/", { sourcemaps: "." }),
         ],
         handleError(done)
     );
 }
 
-function hbs(done) {
-    src(["*.hbs", "partials/**/*.hbs"]);
-    handleError(done);
-}
-
 function zipper(done) {
-    const filename = require("./package.json").name + ".zip";
-
+    const filename = `${theme_name}.zip`;
     pump(
         [
             src([
@@ -137,10 +141,10 @@ function zipper(done) {
                 "!node_modules",
                 "!node_modules/**",
                 "!dist",
-                "!dist/**"
+                "!dist/**",
             ]),
             zip(filename),
-            dest("dist/")
+            dest("dist/"),
         ],
         handleError(done)
     );
@@ -163,15 +167,11 @@ function serveDocker(done) {
                 "!docker-compose.yml",
                 "!docker-mount",
                 "!docker-mount/**",
-                "!assets",
-                "!assets/**"
+                "!assets/css/**",
+                "!assets/js/**",
             ]),
-            dest("docker-mount/")
+            dest("docker-mount/"),
         ],
-        handleError(done)
-    );
-    pump(
-        [src(["assets/built/*"]), dest("docker-mount/assets/built")],
         handleError(done)
     );
 }
@@ -182,8 +182,10 @@ const hbsWatcher = () =>
     watch(["*.hbs", "partials/**/*.hbs"], series(serveDocker, reload));
 const watcher = parallel(cssWatcher, hbsWatcher);
 const build = series(css_startup, js, serveDocker);
+const build_prod = series(css_prod, js, serveDocker);
 
 exports.build = build;
+exports.build_prod = build_prod;
 exports.zip = series(build, zipper);
 exports.default = series(build, serve, watcher);
 
@@ -191,9 +193,9 @@ const previousRelease = () => {
     return releaseUtils.releases
         .get({
             userAgent: USER_AGENT,
-            uri: `https://api.github.com/repos/${REPO_READONLY}/releases`
+            uri: `https://api.github.com/repos/${REPO_READONLY}/releases`,
         })
-        .then(response => {
+        .then((response) => {
             if (!response || !response.length) {
                 console.log("No releases found. Skipping...");
                 return;
@@ -243,22 +245,22 @@ exports.release = () => {
                 type: "input",
                 name: "compatibleWithGhost",
                 message: "Which version of Ghost is it compatible with?",
-                default: "3.0.0"
-            }
+                default: "3.0.0",
+            },
         ])
-        .then(result => {
+        .then((result) => {
             let compatibleWithGhost = result.compatibleWithGhost;
 
-            previousRelease().then(previousVersion => {
+            previousRelease().then((previousVersion) => {
                 const changelog = new releaseUtils.Changelog({
                     changelogPath: CHANGELOG_PATH,
-                    folder: path.join(process.cwd(), ".")
+                    folder: path.join(process.cwd(), "."),
                 });
 
                 changelog
                     .write({
                         githubRepoPath: `https://github.com/${REPO}`,
-                        lastVersion: previousVersion
+                        lastVersion: previousVersion,
                     })
                     .sort()
                     .clean();
@@ -273,14 +275,14 @@ exports.release = () => {
                         uri: `https://api.github.com/repos/${REPO}/releases`,
                         github: {
                             username: config.github.username,
-                            token: config.github.token
+                            token: config.github.token,
                         },
                         content: [
-                            `**Compatible with Ghost ≥ ${compatibleWithGhost}**\n\n`
+                            `**Compatible with Ghost ≥ ${compatibleWithGhost}**\n\n`,
                         ],
-                        changelogPath: CHANGELOG_PATH
+                        changelogPath: CHANGELOG_PATH,
                     })
-                    .then(response => {
+                    .then((response) => {
                         console.log(
                             `\nRelease draft generated: ${response.releaseUrl}\n`
                         );
