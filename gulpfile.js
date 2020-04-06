@@ -19,17 +19,83 @@ const cssnano = require("cssnano");
 const customProperties = require("postcss-custom-properties");
 const easyimport = require("postcss-easy-import");
 const tailwindcss = require("tailwindcss");
-const tailwind_config = "./tailwind.config.js";
 const purgecss = require("@fullhuman/postcss-purgecss");
 
 // browser sync
 browserSync = require("browser-sync").create();
 
-const REPO = "TryGhost/Casper";
-const REPO_READONLY = "TryGhost/Casper";
-const USER_AGENT = "Casper";
-const CHANGELOG_PATH = path.join(process.cwd(), ".", "changelog.md");
-const theme_name = require("./package.json").name;
+// gscan
+//const gscan = require("gscan")
+
+// const REPO = "TryGhost/Casper";
+// const REPO_READONLY = "TryGhost/Casper";
+// const USER_AGENT = "Casper";
+// const CHANGELOG_PATH = path.join(process.cwd(), ".", "changelog.md");
+const themeName = require("./package.json").name;
+
+const paths = {
+    css: {
+        src: ["assets/css/**/*.css"],
+        dest: "assets/built/",
+    },
+    js: {
+        src: [
+            // pull in lib files first so our own code can depend on it
+            "assets/js/lib/*.js",
+            "assets/js/*.js",
+        ],
+        dest: "assets/built/",
+    },
+    tailwind: {
+        config: "tailwind.config.js",
+        src: "assets/css/tailwind.css",
+    },
+    hbs: {
+        src: ["**/*.hbs", ...ignore(["docker-mount", "docker-mount/**"])],
+    },
+    serve: {
+        docker: {
+            toIgnore: [
+                "node_modules",
+                "node_modules/**",
+                "dist",
+                "dist/**",
+                "docker-compose.yml",
+                "docker-mount",
+                "docker-mount/**",
+                "assets/css/**",
+                "assets/js/**",
+            ],
+            dest: "docker-mount/",
+        },
+        zip: {
+            toIgnore: [
+                "node_modules",
+                "node_modules/**",
+                "dist",
+                "dist/**",
+                // "docker-compose.yml",
+                "docker-mount",
+                "docker-mount/**",
+                // "assets/css/**",
+                // "assets/js/**",
+            ],
+            dest: "dist/",
+        },
+    },
+};
+
+function ignore(path) {
+    if (Array.isArray(path)) {
+        const ignored = [];
+        path.forEach(
+            (element, index) => (ignored[index] = "!".concat(element))
+        );
+        return ignored;
+    } else {
+        return "!".concat(path);
+    }
+}
 
 function serve(done) {
     browserSync.init({
@@ -65,17 +131,17 @@ const css_actions = [
 function css_prod(done) {
     pump(
         [
-            src("assets/css/*.css", { sourcemaps: true }),
+            src(paths.css.src, { sourcemaps: true }),
             postcss([
-                tailwindcss(tailwind_config),
+                tailwindcss(paths.tailwind.config),
                 ...css_actions,
                 purgecss({
-                    content: ["**/*.hbs"],
+                    content: paths.hbs.src,
                     defaultExtractor: (content) =>
                         content.match(/[\w-/:]+(?<!:)/g) || [],
                 }),
             ]),
-            dest("assets/built/", { sourcemaps: "." }),
+            dest(paths.css.dest, { sourcemaps: "." }),
         ],
         handleError(done)
     );
@@ -89,9 +155,9 @@ function css_prod(done) {
 function css_startup(done) {
     pump(
         [
-            src("assets/css/*.css", { sourcemaps: true }),
-            postcss([tailwindcss(tailwind_config), ...css_actions]),
-            dest("assets/built/", { sourcemaps: "." }),
+            src(paths.css.src, { sourcemaps: true }),
+            postcss([tailwindcss(paths.tailwind.config), ...css_actions]),
+            dest(paths.css.dest, { sourcemaps: "." }),
         ],
         handleError(done)
     );
@@ -105,11 +171,11 @@ function css_startup(done) {
 function css(done) {
     pump(
         [
-            src("assets/css/*.css", "!assets/css/tailwind.css", {
+            src([...paths.css.src, ignore(paths.tailwind.src)], {
                 sourcemaps: true,
             }),
             postcss([...css_actions]),
-            dest("assets/built/", { sourcemaps: "." }),
+            dest(paths.css.dest, { sourcemaps: "." }),
         ],
         handleError(done)
     );
@@ -118,35 +184,22 @@ function css(done) {
 function js(done) {
     pump(
         [
-            src(
-                [
-                    // pull in lib files first so our own code can depend on it
-                    "assets/js/lib/*.js",
-                    "assets/js/*.js",
-                ],
-                { sourcemaps: true }
-            ),
-            concat(`${theme_name}.js`),
+            src(paths.js.src, { sourcemaps: true }),
+            concat(`${themeName}.js`),
             uglify(),
-            dest("assets/built/", { sourcemaps: "." }),
+            dest(paths.js.dest, { sourcemaps: "." }),
         ],
         handleError(done)
     );
 }
 
 function zipper(done) {
-    const filename = `${theme_name}.zip`;
+    const filename = `${themeName}.zip`;
     pump(
         [
-            src([
-                "**",
-                "!node_modules",
-                "!node_modules/**",
-                "!dist",
-                "!dist/**",
-            ]),
+            src(["**", ...ignore(paths.serve.zip.toIgnore)]),
             zip(filename),
-            dest("dist/"),
+            dest(paths.serve.zip.dest),
         ],
         handleError(done)
     );
@@ -160,28 +213,15 @@ function reload(done) {
 function serveDocker(done) {
     pump(
         [
-            src([
-                "**",
-                "!node_modules",
-                "!node_modules/**",
-                "!dist",
-                "!dist/**",
-                "!docker-compose.yml",
-                "!docker-mount",
-                "!docker-mount/**",
-                "!assets/css/**",
-                "!assets/js/**",
-            ]),
-            dest("docker-mount/"),
+            src(["**", ...ignore(paths.serve.docker.toIgnore)]),
+            dest(paths.serve.docker.dest),
         ],
         handleError(done)
     );
 }
 
-const cssWatcher = () =>
-    watch("assets/css/**", series(css, serveDocker, reload));
-const hbsWatcher = () =>
-    watch(["*.hbs", "partials/**/*.hbs"], series(serveDocker, reload));
+const cssWatcher = () => watch(paths.css.src, series(css, serveDocker, reload));
+const hbsWatcher = () => watch(paths.hbs.src, series(serveDocker, reload));
 const watcher = parallel(cssWatcher, hbsWatcher);
 const build = series(css_startup, js, serveDocker);
 const build_prod = series(css_prod, js, serveDocker);
