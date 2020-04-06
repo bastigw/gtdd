@@ -11,6 +11,7 @@ const concat = require("gulp-concat");
 const uglify = require("gulp-uglify");
 const beeper = require("beeper");
 const fs = require("fs");
+const log = require("fancy-log");
 
 // postcss plugins
 const autoprefixer = require("autoprefixer");
@@ -25,7 +26,13 @@ const purgecss = require("@fullhuman/postcss-purgecss");
 browserSync = require("browser-sync").create();
 
 // gscan
-//const gscan = require("gscan")
+const gscan = require("gscan");
+const defaultOptions = {
+    checkVersion: "v3",
+    verbose: false,
+    onlyFatalErrors: false,
+};
+const { outputResults } = require("./helpers/log");
 
 // const REPO = "TryGhost/Casper";
 // const REPO_READONLY = "TryGhost/Casper";
@@ -122,6 +129,21 @@ const css_actions = [
     autoprefixer(),
     cssnano(),
 ];
+
+function checkTheme(done, buildPath, options) {
+    options = options || defaultOptions;
+    buildPath = buildPath || "docker-mount/";
+    gscan
+        .check(buildPath, options)
+        .then((theme) => {
+            outputResults(theme, options, log);
+            done();
+        })
+        .catch((err) => {
+            log.error(err.message);
+            done();
+        });
+}
 
 /**
  * Build TailwindCSS style once
@@ -220,16 +242,18 @@ function serveDocker(done) {
     );
 }
 
-const cssWatcher = () => watch(paths.css.src, series(css, serveDocker, reload));
-const hbsWatcher = () => watch(paths.hbs.src, series(serveDocker, reload));
+const build_dev = [checkTheme, serveDocker, reload];
+const cssWatcher = () => watch(paths.css.src, series(css, ...build_dev));
+const hbsWatcher = () => watch(paths.hbs.src, series(...build_dev));
 const watcher = parallel(cssWatcher, hbsWatcher);
-const build = series(css_startup, js, serveDocker);
+const build = series(css_startup, js, serveDocker, checkTheme);
 const build_prod = series(css_prod, js, serveDocker);
 
 exports.build = build;
 exports.build_prod = build_prod;
 exports.zip = series(build, zipper);
 exports.default = series(build, serve, watcher);
+exports.test = series(checkTheme);
 
 const previousRelease = () => {
     return releaseUtils.releases
