@@ -14,6 +14,7 @@ const uglify = require("gulp-uglify");
 const fs = require("fs");
 const log = require("fancy-log");
 const PluginError = require("plugin-error");
+const changed = require("gulp-changed");
 
 // postcss plugins
 const autoprefixer = require("autoprefixer");
@@ -246,6 +247,7 @@ function serveDocker(done) {
     pump(
         [
             src(["**", ...ignore(paths.serve.docker.toIgnore)]),
+            changed(paths.serve.docker.dest),
             dest(paths.serve.docker.dest),
         ],
         handleError(done)
