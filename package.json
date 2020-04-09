@@ -60,6 +60,7 @@
         "gulp-zip": "5.0.1",
         "inquirer": "7.1.0",
         "lodash": "^4.17.15",
+        "plugin-error": "^1.0.1",
         "postcss-color-function": "4.1.0",
         "postcss-custom-properties": "9.1.1",
         "postcss-easy-import": "3.0.0",

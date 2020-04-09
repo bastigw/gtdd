@@ -3,15 +3,17 @@ const pump = require("pump");
 const path = require("path");
 const releaseUtils = require("@tryghost/release-utils");
 const inquirer = require("inquirer");
+const chalk = require("chalk");
+const _ = require("lodash");
 
 // gulp plugins and utils
 const postcss = require("gulp-postcss");
 const zip = require("gulp-zip");
 const concat = require("gulp-concat");
 const uglify = require("gulp-uglify");
-const beeper = require("beeper");
 const fs = require("fs");
 const log = require("fancy-log");
+const PluginError = require("plugin-error");
 
 // postcss plugins
 const autoprefixer = require("autoprefixer");
@@ -116,7 +118,7 @@ function serve(done) {
 const handleError = (done) => {
     return function (err) {
         if (err) {
-            beeper();
+            log(err);
         }
         return done(err);
     };
@@ -137,10 +139,18 @@ function checkTheme(done, buildPath, options) {
         .check(buildPath, options)
         .then((theme) => {
             outputResults(theme, options, log);
+            if (theme.results.error.length) {
+                throw new PluginError(
+                    "gscan",
+                    "Gscan raised an error. Please check the log above and resolve the error."
+                );
+            }
             done();
         })
         .catch((err) => {
-            log.error(err.message);
+            log.error(chalk.red("-".repeat(20)));
+            log.error(chalk.red.bold(err.message));
+            log.error(chalk.red("-".repeat(20)));
             done();
         });
 }
